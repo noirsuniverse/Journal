@@ -541,3 +541,9 @@ java JournalApp
    git clone https://github.com/yourusername/LunaLog.git
 3. Compile & run:
    cd src && javac *.java && java JournalApp
+   
+## **🤝 Contrinuting**
+PRs welcome! To add:
+- More brush types (spray, shapes)
+- Cloud sync functionality
+- PDF export
