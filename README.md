@@ -1,7 +1,8 @@
 # 📖 LunaLog - Digital Journal & Sketchbook  
 *A hybrid Java Swing application for expressive journaling with rich text and drawing tools*
 
-![LunaLog Screenshot](screenshots/main_ui.png) *(Add actual screenshot later)*
+![LunaLog Screenshot](Screenshots/ss1.png)
+![LunaLog Screenshot](Screenshots/ss2.png)
 
 ## ✨ Features  
 **🎨 Dual-Mode Interface**  
