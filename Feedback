@@ -1,0 +1,187 @@
+import java.awt.*;
+import java.awt.event.*;
+import java.awt.image.BufferedImage;
+import javax.swing.*;
+import javax.swing.text.StyleConstants;
+import javax.swing.text.StyledDocument;
+
+
+
+Menu themesMenu = new JMenu("Themes");
+        JMenuItem pastelTheme = new JMenuItem("Pastel");
+        JMenuItem cyberpunkTheme = new JMenuItem("Cyberpunk");
+        JMenuItem cottagecoreTheme = new JMenuItem("Cottagecore");
+        JMenuItem monochromeTheme = new JMenuItem("Monochrome");
+        JMenuItem oceanicTheme = new JMenuItem("Oceanic");
+        JMenuItem retroTheme = new JMenuItem("Retro");
+        pastelTheme.addActionListener(e -> setTheme("Pastel"));
+        cyberpunkTheme.addActionListener(e -> setTheme("Cyberpunk"));
+        cottagecoreTheme.addActionListener(e -> setTheme("Cottagecore"));
+        monochromeTheme.addActionListener(e -> setTheme("Monochrome"));
+        oceanicTheme.addActionListener(e -> setTheme("Oceanic"));
+        retroTheme.addActionListener(e -> setTheme("Retro"));
+        themesMenu.add(pastelTheme);
+        themesMenu.add(cyberpunkTheme);
+        themesMenu.add(cottagecoreTheme);
+        themesMenu.add(monochromeTheme);
+        themesMenu.add(oceanicTheme);
+        themesMenu.add(retroTheme);
+        menuBar.add(themesMenu); private void setTheme(String theme) {
+    Color backgroundColor;
+    Color textPaneColor;
+    Color textColor;
+    Color menuBarColor;
+    
+    switch (theme) {
+        case "Pastel":
+            backgroundColor = new Color(255, 228, 225);
+            textPaneColor = new Color(255, 250, 240);
+            textColor = Color.BLACK;
+            menuBarColor = new Color(255, 228, 225);  // Light pink for menu
+            break;
+        case "Cyberpunk":
+            backgroundColor = new Color(12, 12, 50);
+            textPaneColor = new Color(34, 34, 74);
+            textColor = Color.GREEN;
+            menuBarColor = new Color(34, 34, 74);  // Dark blue for menu
+            break;
+        case "Cottagecore":
+            backgroundColor = new Color(250, 240, 215);
+            textPaneColor = new Color(240, 230, 220);
+            textColor = Color.DARK_GRAY;
+            menuBarColor = new Color(250, 240, 215);  // Soft beige for menu
+            break;
+        case "Monochrome":
+            backgroundColor = Color.BLACK;
+            textPaneColor = Color.DARK_GRAY;
+            textColor = Color.WHITE;
+            menuBarColor = Color.DARK_GRAY;  // Dark gray for menu
+            break;
+        case "Oceanic":
+            backgroundColor = new Color(0, 105, 148);
+            textPaneColor = new Color(0, 168, 232);
+            textColor = Color.WHITE;
+            menuBarColor = new Color(0, 168, 232);  // Light blue for menu
+            break;
+        case "Retro":
+            backgroundColor = new Color(255, 204, 0);
+            textPaneColor = new Color(255, 239, 173);
+            textColor = Color.BLACK;
+            menuBarColor = new Color(255, 239, 173);  // Light yellow for menu
+            break;
+        default:
+            return;
+    }
+
+    // Update background and foreground for the main content
+    getContentPane().setBackground(backgroundColor);
+    centerToolPanel.setBackground(backgroundColor);
+    textPane.setBackground(textPaneColor);
+    textPane.setForeground(textColor);
+    
+    // Update the menu bar's colors
+    menuBar.setBackground(menuBarColor);
+    menuBar.setForeground(textColor);
+
+    // Update colors for buttons and combo boxes in the center tool panel
+    for (Component c : centerToolPanel.getComponents()) {
+        if (c instanceof JButton || c instanceof JComboBox) {
+            c.setBackground(backgroundColor);
+            c.setForeground(textColor);
+        }
+    }
+
+    // Repaint to apply the changes
+    repaint();
+} private void setCurrentTool(String tool) {
+        this.currentTool = tool;
+        drawingPanel.setCurrentTool(tool);
+        if ("Text".equals(tool)) {
+            drawingPanel.setVisible(false);
+            textPane.setVisible(true);
+        } else {
+            drawingPanel.setVisible(true);
+            textPane.setVisible(false);
+        }
+    }private void chooseColor() {
+        Color selectedColor = JColorChooser.showDialog(this, "Choose a color", currentColor);
+        if (selectedColor != null) {
+            currentColor = selectedColor;
+            drawingPanel.setCurrentColor(selectedColor);
+            textPane.setForeground(selectedColor); // Set font color
+        }
+    }
+
+    lass DrawingPanel extends JPanel {
+    private String currentTool = "Pencil";
+    private Color currentColor = Color.BLACK;
+    private BufferedImage canvas;
+    private Graphics2D g2d;
+    private int prevX, prevY;
+
+    public DrawingPanel() {
+        setBackground(Color.WHITE);
+        setPreferredSize(new Dimension(800, 800));
+
+        canvas = new BufferedImage(800, 800, BufferedImage.TYPE_INT_ARGB);
+        g2d = canvas.createGraphics();
+        g2d.setColor(Color.WHITE);
+        g2d.fillRect(0, 0, canvas.getWidth(), canvas.getHeight());
+        g2d.setColor(currentColor);
+
+        addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                prevX = e.getX();
+                prevY = e.getY();
+                if ("PaintBucket".equals(currentTool)) {
+                    fillArea(e.getX(), e.getY(), currentColor);
+                }
+            }
+        });
+
+        addMouseMotionListener(new MouseMotionAdapter() {
+            @Override
+            public void mouseDragged(MouseEvent e) {
+                int x = e.getX();
+                int y = e.getY();
+                if ("Pencil".equals(currentTool)) {
+                    g2d.setStroke(new BasicStroke(2));
+                    g2d.drawLine(prevX, prevY, x, y);
+                } else if ("Paintbrush".equals(currentTool)) {
+                    g2d.setStroke(new BasicStroke(15));
+                    g2d.drawLine(prevX, prevY, x, y);
+                } else if ("Eraser".equals(currentTool)) {
+                    g2d.setStroke(new BasicStroke(50));
+                    g2d.setColor(getBackground());
+                    g2d.drawLine(prevX, prevY, x, y);
+                    g2d.setColor(currentColor);
+                }
+                prevX = x;
+                prevY = y;
+                repaint();
+            }
+        });
+    }
+
+    public void setCurrentTool(String tool) {
+        this.currentTool = tool;
+    }
+
+    public void setCurrentColor(Color color) {
+        this.currentColor = color;
+        g2d.setColor(color);
+    }
+
+    @Override
+    protected void paintComponent(Graphics g) {
+        super.paintComponent(g);
+        g.drawImage(canvas, 0, 0, null);
+    }
+
+    private void fillArea(int x, int y, Color fillColor) {
+        g2d.setColor(fillColor);
+        g2d.fillRect(0, 0, getWidth(), getHeight());
+        repaint();
+    }
+}
