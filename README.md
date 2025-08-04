@@ -14,34 +14,69 @@
 - Full UI color customization (backgrounds, text, menus)  
 
 **💾 Smart Journal Management**  
-- Save entries as compressed `.journal` files (text + drawings combined)  
-- Load previous entries with one click  
+- **SQLite Database** for local entry storage  
+- Save entries as compressed `.journal` files (text + drawings combined in ZIP format)  
+- Load previous entries from database or file system  
+- Title-based organization system  
+
 
 **✏️ Creative Tools**  
-- Color picker for custom palette selection  
-- Multiple brush sizes and styles  
-- Font family and size customization  
+- Advanced color picker with full RGB spectrum  
+- Adjustable eraser sizes (10px to 50px)  
+- Smooth drawing algorithms for natural strokes  
+- Paint Bucket tool for quick fills  
+  
 
 ## 🛠 Tech Stack  
 ![Java](https://img.shields.io/badge/Java-17+-lightgrey?logo=java)  ![Swing](https://img.shields.io/badge/Java_Swing-GUI-black)  ![AWT](https://img.shields.io/badge/AWT-Drawing_Utils-white)  
 
 ```
-import java.awt.*;
-import java.awt.event.*;
+package com.yourname.journalapp;
+
+
+import java.awt.BasicStroke;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.GraphicsEnvironment;
+import java.awt.Image;
+import java.awt.Point;
+import java.awt.event.ActionListener;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.awt.event.MouseMotionAdapter;
 import java.awt.image.BufferedImage;
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
-import java.io.FileReader;
-import java.io.FileWriter;
 import java.io.IOException;
+import java.sql.SQLException;
 import java.util.List;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
+
 import javax.imageio.ImageIO;
-import javax.swing.*;
+import javax.swing.ImageIcon;
+import javax.swing.JButton;
+import javax.swing.JColorChooser;
+import javax.swing.JComboBox;
+import javax.swing.JFileChooser;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JMenu;
+import javax.swing.JMenuBar;
+import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.JTextArea;
+import javax.swing.JTextPane;
+import javax.swing.SwingUtilities;
 import javax.swing.text.StyleConstants;
 import javax.swing.text.StyledDocument;
 
@@ -63,6 +98,19 @@ public class JournalApp extends JFrame {
         setResizable(false); // Prevent resizing
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLayout(new BorderLayout());
+
+        try {
+            DatabaseHelper.initializeDatabase();
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this,
+                 "Database initialization failed:\n" + e.getMessage(), 
+                 "Database Error", 
+                 JOptionPane.ERROR_MESSAGE);
+            System.exit(1);
+    }
+
+       
+
 
         // Text pane for typing
         textPane = new JTextPane();
@@ -90,12 +138,21 @@ public class JournalApp extends JFrame {
     }
 
     private void addToolIcons(JPanel panel) {
-        panel.add(createToolIcon("icons/textbox.png", e -> setCurrentTool("Text")));
-        panel.add(createToolIcon("icons/pencil.png", e -> setCurrentTool("Pencil")));
-        panel.add(createToolIcon("icons/paintbrush.png", e -> setCurrentTool("Paintbrush")));
-        panel.add(createToolIcon("icons/paintbucket.png", e -> setCurrentTool("PaintBucket")));
-        panel.add(createToolIcon("icons/eraser.png", e -> setCurrentTool("Eraser")));
-        panel.add(createToolIcon("icons/palette.png", e -> chooseColor()));
+        panel.add(createToolIcon("/Users/mo/Desktop/Journal/Journal/src/main/resources/icons/textbox.png", e -> setCurrentTool("Text")));
+        panel.add(createToolIcon("/Users/mo/Desktop/Journal/Journal/src/main/resources/icons/pencil.png", e -> setCurrentTool("Pencil")));
+        panel.add(createToolIcon("/Users/mo/Desktop/Journal/Journal/src/main/resources/icons/paintbrush.png", e -> setCurrentTool("Paintbrush")));
+        panel.add(createToolIcon("/Users/mo/Desktop/Journal/Journal/src/main/resources/icons/paintbucket.png", e -> setCurrentTool("PaintBucket")));
+        panel.add(createToolIcon("/Users/mo/Desktop/Journal/Journal/src/main/resources/icons/eraser.png", e -> setCurrentTool("Eraser")));
+        panel.add(createToolIcon("/Users/mo/Desktop/Journal/Journal/src/main/resources/icons/palette.png", e -> chooseColor()));
+
+        // Add eraser size control
+        JComboBox<Integer> sizeCombo = new JComboBox<>(new Integer[]{10, 20, 30, 50});
+        sizeCombo.setSelectedItem(20);
+        sizeCombo.addActionListener(e -> {
+            drawingPanel.setEraserSize((Integer)sizeCombo.getSelectedItem());
+        });
+        panel.add(new JLabel("Eraser Size:"));
+        panel.add(sizeCombo);
     }
 
     private JButton createToolIcon(String iconFile, ActionListener action) {
@@ -176,29 +233,8 @@ public class JournalApp extends JFrame {
         return menuBar;
     }
 
-    private void loadEntries() {
-        List<String> entries = DatabaseHelper.getJournalEntries(1);
-        if (entries == null || entries.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "No entries found!");
-            return;
-        }
     
-        // Display entries
-        JTextArea entriesArea = new JTextArea();
-        StringBuilder entryDisplay = new StringBuilder();
-        for (String entry : entries) {
-            entryDisplay.append(entry).append("\n\n");
-        }
-        entriesArea.setText(entryDisplay.toString());
-        entriesArea.setEditable(false);
     
-        JScrollPane scrollPane = new JScrollPane(entriesArea);
-        scrollPane.setPreferredSize(new Dimension(600, 400));
-    
-        JOptionPane.showMessageDialog(this, scrollPane, "Journal Entries", JOptionPane.INFORMATION_MESSAGE);
-    }
-    
-
 
     private void setTheme(String theme) {
     Color backgroundColor;
@@ -292,134 +328,113 @@ public class JournalApp extends JFrame {
     }
 
     private void saveEntry() {
-    String content = textPane.getText();
-    String title = JOptionPane.showInputDialog("Enter title for the entry:");
+        String content = textPane.getText();
+        String title = JOptionPane.showInputDialog("Enter title for the entry:");
+        
+        if (title == null || title.isEmpty() || content.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Title and content cannot be empty!");
+            return;
+        }
 
-    if (title != null && !title.isEmpty() && content != null && !content.isEmpty()) {
+        try {
+            // Save to database
+            DatabaseHelper.saveJournalEntry(title, content, null);
+            
+            // Save as .journal file
+            JFileChooser fileChooser = new JFileChooser();
+            fileChooser.setSelectedFile(new File(title + ".journal"));
+            
+            if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+                saveJournalToFile(fileChooser.getSelectedFile(), content);
+                JOptionPane.showMessageDialog(this, "Entry saved successfully!");
+            }
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, 
+                "Error saving entry: " + e.getMessage(), 
+                "Error", 
+                JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void saveJournalToFile(File file, String content) {
+        try (ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(file))) {
+            // Save text
+            zos.putNextEntry(new ZipEntry("content.txt"));
+            zos.write(content.getBytes());
+            zos.closeEntry();
+            
+            // Save drawing
+            if (drawingPanel.getCanvas() != null) {
+                zos.putNextEntry(new ZipEntry("drawing.png"));
+                ImageIO.write(drawingPanel.getCanvas(), "png", zos);
+                zos.closeEntry();
+            }
+        } catch (IOException e) {
+            JOptionPane.showMessageDialog(this, 
+                "File save error: " + e.getMessage(), 
+                "Error", 
+                JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void loadEntries() {
+        try {
+            List<String> entries = DatabaseHelper.getJournalEntries();
+            
+            if (entries.isEmpty()) {
+                int choice = JOptionPane.showConfirmDialog(this, 
+                    "No entries found. Load from file instead?", 
+                    "No Entries", 
+                    JOptionPane.YES_NO_OPTION);
+                
+                if (choice == JOptionPane.YES_OPTION) {
+                    openJournalEntry();
+                }
+                return;
+            }
+
+            // Display entries
+            JTextArea entriesArea = new JTextArea();
+            entries.forEach(entry -> entriesArea.append(entry + "\n\n"));
+            
+            JScrollPane scrollPane = new JScrollPane(entriesArea);
+            scrollPane.setPreferredSize(new Dimension(600, 400));
+            JOptionPane.showMessageDialog(this, scrollPane, "Your Entries", JOptionPane.PLAIN_MESSAGE);
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, 
+                "Error loading entries: " + e.getMessage(), 
+                "Error", 
+                JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void openJournalEntry() {
         JFileChooser fileChooser = new JFileChooser();
-        fileChooser.setDialogTitle("Save Journal Entry");
-        fileChooser.setSelectedFile(new File(title + ".journal"));
-
-        int userSelection = fileChooser.showSaveDialog(this);
-        if (userSelection == JFileChooser.APPROVE_OPTION) {
-            File fileToSave = fileChooser.getSelectedFile();
-            saveJournalToFile(fileToSave, content);
-            JOptionPane.showMessageDialog(this, "Journal entry saved successfully!");
-        }
-    } else {
-        JOptionPane.showMessageDialog(this, "Title and content cannot be empty!");
-    }
-}
-
-// Helper method to save both text and drawing
-private void saveJournalToFile(File file, String textContent) {
-    try {
-        // Create a temporary folder to store text and image
-        File tempFolder = new File(file.getParent(), "temp_" + System.currentTimeMillis());
-        tempFolder.mkdir();
-
-        // Save text
-        File textFile = new File(tempFolder, "content.txt");
-        try (FileWriter writer = new FileWriter(textFile)) {
-            writer.write(textContent);
-        }
-
-        // Save drawing as an image
-        File imageFile = new File(tempFolder, "drawing.png");
-        ImageIO.write(drawingPanel.getCanvas(), "png", imageFile);
-
-        // Create a ZIP archive (or a `.journal` file)
-        try (FileOutputStream fos = new FileOutputStream(file);
-             ZipOutputStream zos = new ZipOutputStream(fos)) {
-
-            // Add text file to ZIP
-            addToZipFile(textFile, zos);
-
-            // Add image file to ZIP
-            addToZipFile(imageFile, zos);
-        }
-
-        // Clean up temporary files
-        textFile.delete();
-        imageFile.delete();
-        tempFolder.delete();
-    } catch (Exception e) {
-        JOptionPane.showMessageDialog(this, "Error saving journal: " + e.getMessage());
-    }
-}
-
-// Add a file to ZIP
-private void addToZipFile(File file, ZipOutputStream zos) throws IOException {
-    try (FileInputStream fis = new FileInputStream(file)) {
-        ZipEntry zipEntry = new ZipEntry(file.getName());
-        zos.putNextEntry(zipEntry);
-
-        byte[] bytes = new byte[1024];
-        int length;
-        while ((length = fis.read(bytes)) >= 0) {
-            zos.write(bytes, 0, length);
+        fileChooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter(
+            "Journal Files", "journal"));
+        
+        if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+            loadJournalFromFile(fileChooser.getSelectedFile());
         }
     }
-}
 
-private void openJournalEntry() {
-    JFileChooser fileChooser = new JFileChooser();
-    fileChooser.setDialogTitle("Open Journal Entry");
-
-    int userSelection = fileChooser.showOpenDialog(this);
-    if (userSelection == JFileChooser.APPROVE_OPTION) {
-        File fileToOpen = fileChooser.getSelectedFile();
-        loadJournalFromFile(fileToOpen);
-    }
-}
-
-// Helper method to load a journal entry
-private void loadJournalFromFile(File file) {
-    try {
-        // Extract files from the `.journal` ZIP archive
-        File tempFolder = new File(file.getParent(), "temp_" + System.currentTimeMillis());
-        tempFolder.mkdir();
-
+    private void loadJournalFromFile(File file) {
         try (ZipInputStream zis = new ZipInputStream(new FileInputStream(file))) {
-            ZipEntry zipEntry;
-            while ((zipEntry = zis.getNextEntry()) != null) {
-                File newFile = new File(tempFolder, zipEntry.getName());
-                try (FileOutputStream fos = new FileOutputStream(newFile)) {
-                    byte[] buffer = new byte[1024];
-                    int len;
-                    while ((len = zis.read(buffer)) > 0) {
-                        fos.write(buffer, 0, len);
-                    }
+            ZipEntry entry;
+            while ((entry = zis.getNextEntry()) != null) {
+                if (entry.getName().equals("content.txt")) {
+                    textPane.setText(new String(zis.readAllBytes()));
+                } else if (entry.getName().equals("drawing.png")) {
+                    drawingPanel.setCanvas(ImageIO.read(zis));
                 }
             }
+        } catch (IOException e) {
+            JOptionPane.showMessageDialog(this, 
+                "Error loading file: " + e.getMessage(), 
+                "Error", 
+                JOptionPane.ERROR_MESSAGE);
         }
-
-        // Load text content
-        File textFile = new File(tempFolder, "content.txt");
-        try (BufferedReader reader = new BufferedReader(new FileReader(textFile))) {
-            textPane.setText(reader.lines().reduce("", (acc, line) -> acc + line + "\n"));
-        }
-
-        // Load drawing
-        File imageFile = new File(tempFolder, "drawing.png");
-        BufferedImage image = ImageIO.read(imageFile);
-        drawingPanel.setCanvas(image);
-
-        // Clean up temporary files
-        textFile.delete();
-        imageFile.delete();
-        tempFolder.delete();
-
-        JOptionPane.showMessageDialog(this, "Journal entry loaded successfully!");
-    } catch (Exception e) {
-        JOptionPane.showMessageDialog(this, "Error opening journal: " + e.getMessage());
     }
-}
-
-
-
-
-
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
@@ -428,12 +443,13 @@ private void loadJournalFromFile(File file) {
         });
     }
 }
-
-
-
 class DrawingPanel extends JPanel {
     private String currentTool = "Pencil";
     private Color currentColor = Color.BLACK;
+    private int eraserSize = 20;
+    private Point lastEraserPoint = null;
+    private boolean showEraserPreview = false;
+    private Point currentEraserPosition = null;
     private BufferedImage canvas;
     private Graphics2D g2d;
     private int prevX, prevY;
@@ -456,6 +472,15 @@ class DrawingPanel extends JPanel {
                 if ("PaintBucket".equals(currentTool)) {
                     fillArea(e.getX(), e.getY(), currentColor);
                 }
+                if ("Eraser".equals(currentTool)) {
+                    lastEraserPoint = new Point(e.getX(), e.getY()); // Initialize
+                    currentEraserPosition = new Point(e.getX(), e.getY());
+                }
+            }
+            
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                lastEraserPoint = null; 
             }
         });
 
@@ -464,23 +489,39 @@ class DrawingPanel extends JPanel {
             public void mouseDragged(MouseEvent e) {
                 int x = e.getX();
                 int y = e.getY();
+                
                 if ("Pencil".equals(currentTool)) {
                     g2d.setStroke(new BasicStroke(2));
                     g2d.drawLine(prevX, prevY, x, y);
-                } else if ("Paintbrush".equals(currentTool)) {
+                } 
+                else if ("Paintbrush".equals(currentTool)) {
                     g2d.setStroke(new BasicStroke(15));
                     g2d.drawLine(prevX, prevY, x, y);
-                } else if ("Eraser".equals(currentTool)) {
-                    g2d.setStroke(new BasicStroke(50));
+                } 
+                else if ("Eraser".equals(currentTool)) {
+                    // Smooth eraser implementation
                     g2d.setColor(getBackground());
-                    g2d.drawLine(prevX, prevY, x, y);
+                    g2d.setStroke(new BasicStroke(eraserSize, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                    
+                    // Connect the dots for smooth erasing
+                    if (lastEraserPoint != null) {
+                        g2d.drawLine(lastEraserPoint.x, lastEraserPoint.y, x, y);
+                    } else {
+                        g2d.fillOval(x - eraserSize/2, y - eraserSize/2, eraserSize, eraserSize);
+                    }
                     g2d.setColor(currentColor);
+                    lastEraserPoint = new Point(x, y); // Update last point
+                    currentEraserPosition = new Point(x, y); // For preview
                 }
                 prevX = x;
                 prevY = y;
                 repaint();
             }
         });
+    }
+
+    public void setEraserSize(int size) {
+        this.eraserSize = Math.max(5, size);
     }
 
     public void setCurrentTool(String tool) {
@@ -492,7 +533,7 @@ class DrawingPanel extends JPanel {
         g2d.setColor(color);
     }
 
-    public BufferedImage getCanvas() {  // Add this method
+    public BufferedImage getCanvas() {
         return canvas;
     }
 
@@ -502,7 +543,6 @@ class DrawingPanel extends JPanel {
         repaint();
     }
     
-
     @Override
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
@@ -515,6 +555,7 @@ class DrawingPanel extends JPanel {
         repaint();
     }
 }
+
 ```
 ## **🖥️ UI Components**
 **DrawingPanel:** Handles all drawing operations with mouse listeners
@@ -529,18 +570,21 @@ class DrawingPanel extends JPanel {
 1. **Write:** Type in the right panel with customizable fonts
 2. **Draw:** Switch to canvas mode using toolbar
 3. **Style:** Change themes via Themes Menu
-4. **Save:** Export as ```.journal``` file (text + drawing combined)
-
-## **⌨️Run from source**
-javac JournalApp.java
-java JournalApp
+4. **Save:** Database: Automatic title-based saving File: Export as .journal (ZIP with text + PNG)
 
 ## **🌟Getting Started**
-1. **Requirements:** Java 17+
-2. Clone the repo
-   git clone https://github.com/yourusername/LunaLog.git
-3. Compile & run:
-   cd src && javac *.java && java JournalApp
+**Requirements:** 
+- Java 17+ JDK
+- Maven (for building from source)
+
+## **🛠️Run from source**
+1. Clone the repository:
+   ```git clone https://github.com/yourusername/LunaLog.git```
+2. Build with Maven:
+   ```mvn clean package```
+3. Run the application
+   ```java -jar target/journal-app-1.0.0.jar```
+
    
 ## **🤝 Contrinuting**
 PRs welcome! To add:
